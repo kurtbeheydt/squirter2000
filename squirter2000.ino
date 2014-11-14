@@ -109,8 +109,10 @@ void readStartButton() {
     }
     if (buttonPressed) {
       if (action == ACTION_STANDBY) {
+        digitalWrite(pinSquirtEngine, LOW);
         action = ACTION_SEARCH_TARGET;
       } else {
+        
         action = ACTION_STANDBY;
       }
     }
@@ -170,9 +172,6 @@ void newscan()
       sensorServo.write(servoAngle);
       distance = measureDistance();
       servoAngle = servoAngle + servoAngleIncrement;
-     // Serial.print(servoAngle);
-     // Serial.print(": ");
-     // Serial.println(distance);
       delay(20);
       
       if (scanAngleMin == 0) { // proberen begin van object te scannen
@@ -184,11 +183,9 @@ void newscan()
         } else {
           successCount = 0;  
         }
-        if (successCount >= 8) { //als er drie keer na elkaar een korte afstand gemeten is
+        if (successCount >= 8) { //als er acht keer na elkaar een korte afstand gemeten is
           scanAngleMin = servoAngle - (2 * servoAngleIncrement);
           successCount = 0;
-          //scanDistance = distance;
-//          Serial.println(scanAngleMin);
         }
       } else if (scanAngleMax == 180) {
         if (distance > distanceThreshold) {
@@ -199,25 +196,16 @@ void newscan()
         if (successCount >= 3) { //als er drie keer na elkaar een lange afstand gemeten is
           scanAngleMax = servoAngle - (3 * servoAngleIncrement);
           successCount = 0;
-//          Serial.println(scanAngleMax);
         }
       }
     }
     
-    Serial.print("Object: ");
-    //Serial.print(scanAngleMin);
-    //Serial.print(" - ");
-    //Serial.print(scanAngleMax);
-    
     scanAngle = (scanAngleMin + scanAngleMax) / 2;
-
-    //Serial.print(": ");
+    Serial.print("Object found: ");
     Serial.println(scanAngle);
     
-    sensorServo.write(90);
-  
+    sensorServo.write(90);  
 }
-
 
 
 /*
@@ -225,11 +213,7 @@ void newscan()
  */
 void readWheelSpeed() {
   wheelSpeed = analogRead(pinSpeetPot);
-  //Serial.print("wheel speed: ");
-  //Serial.print(wheelSpeed);
   wheelSpeed = map(wheelSpeed, 0, 1023, 50, 255);
-  //Serial.print(" - ");
-  //Serial.println(wheelSpeed);
 }
 
 void stopWheels() {
@@ -248,11 +232,11 @@ void moveWheels(uint8_t dir) {
 void turnWheels(uint8_t dir, uint32_t velocity, uint8_t moveDelay) {
   stopWheels();
   if (dir == 0) {
-    Serial.println("Draai Links");
+    Serial.println("turn left");
     digitalWrite(pinDirectionA, HIGH);
     digitalWrite(pinDirectionB, LOW);
   } else {
-    Serial.println("Draai Rechts");
+    Serial.println("turn right");
     digitalWrite(pinDirectionA, LOW);
     digitalWrite(pinDirectionB, HIGH);
   }
@@ -275,5 +259,3 @@ void moveBackward(uint8_t moveDelay) {
   delay(moveDelay);
   stopWheels();
 }
-
-
