@@ -29,6 +29,8 @@ uint32_t scanDistance;
 #define distanceThreshold 30
 #define distanceSquirt 20
 
+#define pinSquirtEngine 10
+
 long distance;
 
 // startbutton
@@ -39,10 +41,7 @@ uint32_t startButtonTimePast = 0;
 byte action;
 #define ACTION_STANDBY 0
 #define ACTION_SEARCH_TARGET 1
-#define ACTION_MOVE_TO_TARGET 3
-#define ACTION_SET_DISTANCE 4
-#define ACTION_SQUIRT 5
-#define ACTION_STOPPING 6
+#define ACTION_SQUIRT 2
 
 void setup() {
   pinMode(pinDirectionA, OUTPUT); 
@@ -53,6 +52,7 @@ void setup() {
   pinMode(pinDistanceTrigger, OUTPUT);
   pinMode(pinDistanceEcho, INPUT);
   pinMode(pinStartButten, INPUT);
+  pinMode(pinSquirtEngine, OUTPUT);
   
   sensorServo.attach(pinSensorServo);
   sensorServo.write(servoAngle);
@@ -61,6 +61,7 @@ void setup() {
   delay(1000);
      
   action = ACTION_SEARCH_TARGET;
+  digitalWrite(pinSquirtEngine, LOW);
 }
  
 void loop() {
@@ -71,48 +72,32 @@ void loop() {
   
   switch (action) {
     case ACTION_STANDBY:
+      stopWheels();
       distance = measureDistance();
       Serial.println(distance);
       delay(500);
       break;
     
     case ACTION_SEARCH_TARGET:
-      searchTarget();
-      break;
-      
-    case ACTION_MOVE_TO_TARGET:
-      turnToTarget();
+      newscan();
       if (isPositionOk()) {
         if (isDistanceOk()) {
           action = ACTION_SQUIRT;
         } else {
-          action = ACTION_SET_DISTANCE;
+          postionToTarget();
         }
       } else {
-        if (measureFrontDistance() < distanceSquirt) {
-          moveBackward(300);
-        } else {
-          moveForward(500);
-        }
-        action = ACTION_SEARCH_TARGET; 
+        postionToTarget();
+        turnToTarget();
       }
-      break;
-      
-    case ACTION_SET_DISTANCE:
-      postionToTarget();
       break;
       
     case ACTION_SQUIRT:
       Serial.println("Spuit!");
-      action = ACTION_STANDBY;
-      break;
-      
-    case ACTION_STOPPING:
-      stopWheels();
+      digitalWrite(pinSquirtEngine, HIGH);
       action = ACTION_STANDBY;
       break;
   }
-
 }
 
 void readStartButton() {
@@ -126,61 +111,23 @@ void readStartButton() {
       if (action == ACTION_STANDBY) {
         action = ACTION_SEARCH_TARGET;
       } else {
-        action = ACTION_STOPPING;
+        action = ACTION_STANDBY;
       }
     }
   }
 }
 
-
-
 void turnToTarget() {
-  if (!isPositionOk()) {
-    readWheelSpeed();
-    turnWheels(((scanAngle < 90) ? 0 : 1), wheelSpeed);
-    delay(200);
-  }
-}
-
-void searchTarget() {
-  newscan(); 
+  readWheelSpeed();
+  turnWheels(((scanAngle < 90) ? 0 : 1), wheelSpeed, 200);
 }
 
 void postionToTarget() {
-  newscan();
-  if (isPositionOk()) {
-    distance = measureFrontDistance();
-    Serial.print("postioning: ");
-    Serial.println(distance);
-    while (distance != distanceSquirt) {
-      if (distance > distanceSquirt) {
-        moveForward(100);
-        Serial.println("forward");
-      } else {
-        moveBackward(100);
-        Serial.println("Backward");
-      }
-      stopWheels();
-      distance = measureDistance();
-      if (distance > distanceThreshold) {
-        break;
-      }
-    }
-    if (distance == distanceSquirt) {
-      action = ACTION_SQUIRT;
-    }
+  if (measureFrontDistance() < distanceSquirt) {
+    moveBackward(500);
   } else {
-    action = ACTION_SEARCH_TARGET;
+    moveForward(500);
   }
-}
-
-void readWheelSpeed() {
-  wheelSpeed = analogRead(pinSpeetPot);
-  //Serial.print("wheel speed: ");
-  //Serial.print(wheelSpeed);
-  wheelSpeed = map(wheelSpeed, 0, 1023, 50, 255);
-  //Serial.print(" - ");
-  //Serial.println(wheelSpeed);
 }
 
 long measureDistance() {
@@ -276,6 +223,15 @@ void newscan()
 /*
  *  movement
  */
+void readWheelSpeed() {
+  wheelSpeed = analogRead(pinSpeetPot);
+  //Serial.print("wheel speed: ");
+  //Serial.print(wheelSpeed);
+  wheelSpeed = map(wheelSpeed, 0, 1023, 50, 255);
+  //Serial.print(" - ");
+  //Serial.println(wheelSpeed);
+}
+
 void stopWheels() {
   analogWrite(pinSpeedA, 0);
   analogWrite(pinSpeedB, 0);
@@ -289,7 +245,7 @@ void moveWheels(uint8_t dir) {
   analogWrite(pinSpeedB, wheelSpeed);
 }
 
-void turnWheels(uint8_t dir, uint32_t velocity) {
+void turnWheels(uint8_t dir, uint32_t velocity, uint8_t moveDelay) {
   stopWheels();
   if (dir == 0) {
     Serial.println("Draai Links");
@@ -302,6 +258,8 @@ void turnWheels(uint8_t dir, uint32_t velocity) {
   }
   analogWrite(pinSpeedA, velocity);
   analogWrite(pinSpeedB, velocity);
+  delay(moveDelay);
+  stopWheels();
 }
 
 void moveForward(uint8_t moveDelay) {
