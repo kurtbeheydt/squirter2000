@@ -32,8 +32,8 @@ uint32_t scanDistance;
 long distance;
 
 // startbutton
+#define pinStartButten 4
 uint32_t startButtonTimePast = 0;
-
 
 // actions
 byte action;
@@ -44,19 +44,15 @@ byte action;
 #define ACTION_SQUIRT 5
 #define ACTION_STOPPING 6
 
-
 void setup() {
   pinMode(pinDirectionA, OUTPUT); 
   pinMode(pinSpeedA, OUTPUT); 
   pinMode(pinDirectionB, OUTPUT);
   pinMode(pinSpeedB, OUTPUT);
-  
   pinMode(pinSpeetPot, INPUT);
-  
   pinMode(pinDistanceTrigger, OUTPUT);
   pinMode(pinDistanceEcho, INPUT);
-  
-  pinMode(4,INPUT);
+  pinMode(pinStartButten, INPUT);
   
   sensorServo.attach(pinSensorServo);
   sensorServo.write(servoAngle);
@@ -69,26 +65,31 @@ void setup() {
  
 void loop() {
   readStartButton();
-  
+  Serial.println("------------------");
+  Serial.print("action: ");
+  Serial.println(action);
   
   switch (action) {
     case ACTION_STANDBY:
       distance = measureDistance();
       Serial.println(distance);
-      delay(1000);
+      delay(500);
       break;
     
     case ACTION_SEARCH_TARGET:
-      newscan();
-      action = ACTION_MOVE_TO_TARGET;
+      searchTarget();
       break;
       
     case ACTION_MOVE_TO_TARGET:
       turnToTarget();
       if (isPositionOk()) {
-        action = ACTION_SET_DISTANCE;
+        if (isDistanceOk()) {
+          action = ACTION_SQUIRT;
+        } else {
+          action = ACTION_SET_DISTANCE;
+        }
       } else {
-        if (scanDistance < distanceSquirt) {
+        if (measureFrontDistance() < distanceSquirt) {
           moveBackward(300);
         } else {
           moveForward(500);
@@ -118,7 +119,7 @@ void readStartButton() {
   if (millis() > (startButtonTimePast + 200)) {
     startButtonTimePast = millis();
     bool buttonPressed = 0;
-    while (digitalRead(4)) {
+    while (digitalRead(pinStartButten)) {
       buttonPressed = true;
     }
     if (buttonPressed) {
@@ -131,6 +132,150 @@ void readStartButton() {
   }
 }
 
+
+
+void turnToTarget() {
+  if (!isPositionOk()) {
+    readWheelSpeed();
+    turnWheels(((scanAngle < 90) ? 0 : 1), wheelSpeed);
+    delay(200);
+  }
+}
+
+void searchTarget() {
+  newscan(); 
+}
+
+void postionToTarget() {
+  newscan();
+  if (isPositionOk()) {
+    distance = measureFrontDistance();
+    Serial.print("postioning: ");
+    Serial.println(distance);
+    while (distance != distanceSquirt) {
+      if (distance > distanceSquirt) {
+        moveForward(100);
+        Serial.println("forward");
+      } else {
+        moveBackward(100);
+        Serial.println("Backward");
+      }
+      stopWheels();
+      distance = measureDistance();
+      if (distance > distanceThreshold) {
+        break;
+      }
+    }
+    if (distance == distanceSquirt) {
+      action = ACTION_SQUIRT;
+    }
+  } else {
+    action = ACTION_SEARCH_TARGET;
+  }
+}
+
+void readWheelSpeed() {
+  wheelSpeed = analogRead(pinSpeetPot);
+  //Serial.print("wheel speed: ");
+  //Serial.print(wheelSpeed);
+  wheelSpeed = map(wheelSpeed, 0, 1023, 50, 255);
+  //Serial.print(" - ");
+  //Serial.println(wheelSpeed);
+}
+
+long measureDistance() {
+    long duration, distance;
+    digitalWrite(pinDistanceTrigger, LOW);
+    delayMicroseconds(2);
+    digitalWrite(pinDistanceTrigger, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(pinDistanceTrigger, LOW);
+    duration = pulseIn(pinDistanceEcho, HIGH);
+    distance = ((duration / 2) / 29.1) + 2;
+    return distance;    
+}
+
+long measureFrontDistance() {
+  sensorServo.write(90);
+  delay(400);
+  return measureDistance();
+}
+
+bool isPositionOk() {
+ return ((scanAngle >= 88) && (scanAngle <= 93)); 
+}
+
+bool isDistanceOk() {
+  scanDistance = measureFrontDistance();
+  return (((distanceSquirt + 1) >= scanDistance) && ((distanceSquirt - 1) <= scanDistance));
+}
+
+void newscan()
+{
+    scanAngleMin = 0;
+    scanAngleMax = 180;
+    servoAngle = 10;
+    int successCount = 0;
+    int servoAngleIncrement = 2;
+    scanDistance = 100;
+
+    while (servoAngle < 170) {
+      sensorServo.write(servoAngle);
+      distance = measureDistance();
+      servoAngle = servoAngle + servoAngleIncrement;
+     // Serial.print(servoAngle);
+     // Serial.print(": ");
+     // Serial.println(distance);
+      delay(20);
+      
+      if (scanAngleMin == 0) { // proberen begin van object te scannen
+        if (distance < scanDistance) {
+          scanDistance = distance;
+        }
+        if (distance < distanceThreshold) {
+          successCount++;
+        } else {
+          successCount = 0;  
+        }
+        if (successCount >= 8) { //als er drie keer na elkaar een korte afstand gemeten is
+          scanAngleMin = servoAngle - (2 * servoAngleIncrement);
+          successCount = 0;
+          //scanDistance = distance;
+//          Serial.println(scanAngleMin);
+        }
+      } else if (scanAngleMax == 180) {
+        if (distance > distanceThreshold) {
+          successCount++;
+        } else {
+          successCount = 0;  
+        }
+        if (successCount >= 3) { //als er drie keer na elkaar een lange afstand gemeten is
+          scanAngleMax = servoAngle - (3 * servoAngleIncrement);
+          successCount = 0;
+//          Serial.println(scanAngleMax);
+        }
+      }
+    }
+    
+    Serial.print("Object: ");
+    //Serial.print(scanAngleMin);
+    //Serial.print(" - ");
+    //Serial.print(scanAngleMax);
+    
+    scanAngle = (scanAngleMin + scanAngleMax) / 2;
+
+    //Serial.print(": ");
+    Serial.println(scanAngle);
+    
+    sensorServo.write(90);
+  
+}
+
+
+
+/*
+ *  movement
+ */
 void stopWheels() {
   analogWrite(pinSpeedA, 0);
   analogWrite(pinSpeedB, 0);
@@ -173,146 +318,4 @@ void moveBackward(uint8_t moveDelay) {
   stopWheels();
 }
 
-void turn() {
-  readWheelSpeed();
-  if (scanAngle != 90) {
-    if (scanAngle < 90) {
-      turnWheels(0, wheelSpeed * 2);
-      Serial.println((90 - scanAngle) * 10);
-      delay((90 - scanAngle) * 10);
-    }
-  }
-}
 
-void turnToTarget() {
-  if (!isPositionOk()) {
-    int newAngle;
-    
-    newAngle = (scanAngle < 90) ? (scanAngle + 20) : (scanAngle - 40);
-    Serial.print("new angle: ");
-    Serial.println(newAngle);
-    sensorServo.write(newAngle);
-    delay(400);
-    readWheelSpeed();
-    Serial.print("distance: ");
-    distance = measureDistance();
-    Serial.println(distance);
-    while (distance > distanceThreshold) {
-      turnWheels(((scanAngle < 90) ? 0 : 1), wheelSpeed);
-      distance = measureDistance();
-      Serial.print("distance: ");
-      Serial.println(distance);
-      delay(200);
-    }
-  }
-}
-
-void postionToTarget() {
-  newscan();
-  if (isPositionOk()) {
-    distance = measureDistance();
-    Serial.print("postioning: ");
-    Serial.println(distance);
-    while (distance != distanceSquirt) {
-      if (distance > distanceSquirt) {
-        moveForward(100);
-        Serial.println("forward");
-      } else {
-        moveBackward(100);
-        Serial.println("Backward");
-      }
-      stopWheels();
-      distance = measureDistance();
-      if (distance > distanceThreshold) {
-        break;
-      }
-    }
-    if (distance == distanceSquirt) {
-      action = ACTION_SQUIRT;
-    }
-  } else {
-    action = ACTION_SEARCH_TARGET;
-  }
-}
-
-void readWheelSpeed() {
-  wheelSpeed = analogRead(pinSpeetPot);
-  Serial.print("wheel speed: ");
-  Serial.print(wheelSpeed);
-  wheelSpeed = map(wheelSpeed, 0, 1023, 50, 255);
-  Serial.print(" - ");
-  Serial.println(wheelSpeed);
-}
-
-long measureDistance() {
-    long duration, distance;
-    digitalWrite(pinDistanceTrigger, LOW);
-    delayMicroseconds(2);
-    digitalWrite(pinDistanceTrigger, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(pinDistanceTrigger, LOW);
-    duration = pulseIn(pinDistanceEcho, HIGH);
-    distance = ((duration / 2) / 29.1) + 2;
-    return distance;    
-}
-
-bool isPositionOk() {
- return ((scanAngle >= 88) && (scanAngle <= 93)); 
-}
-
-void newscan()
-{
-    scanAngleMin = 0;
-    scanAngleMax = 180;
-    servoAngle = 10;
-    int successCount = 0;
-    int servoAngleIncrement = 2;
-
-    while (servoAngle < 170) {
-      sensorServo.write(servoAngle);
-      distance = measureDistance();
-      servoAngle = servoAngle + servoAngleIncrement;
-     // Serial.print(servoAngle);
-     // Serial.print(": ");
-     // Serial.println(distance);
-      delay(20);
-      
-      if (scanAngleMin == 0) { // proberen begin van object te scannen
-        if (distance < distanceThreshold) {
-          successCount++;
-        } else {
-          successCount = 0;  
-        }
-        if (successCount >= 5) { //als er drie keer na elkaar een korte afstand gemeten is
-          scanAngleMin = servoAngle - (2 * servoAngleIncrement);
-          successCount = 0;
-          scanDistance = distance;
-//          Serial.println(scanAngleMin);
-        }
-      } else if (scanAngleMax == 180) {
-        if (distance > distanceThreshold) {
-          successCount++;
-        } else {
-          successCount = 0;  
-        }
-        if (successCount >= 3) { //als er drie keer na elkaar een lange afstand gemeten is
-          scanAngleMax = servoAngle - (3 * servoAngleIncrement);
-          successCount = 0;
-//          Serial.println(scanAngleMax);
-        }
-      }
-    }
-    
-    Serial.print("Object: ");
-    Serial.print(scanAngleMin);
-    Serial.print(" - ");
-    Serial.print(scanAngleMax);
-    
-    scanAngle = (scanAngleMin + scanAngleMax) / 2;
-
-    Serial.print(": ");
-    Serial.println(scanAngle);
-    
-    sensorServo.write(90);
-  
-}
