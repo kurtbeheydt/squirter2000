@@ -29,12 +29,14 @@ uint32_t scanDistance;
 #define distanceThreshold 30
 #define distanceSquirt 20
 
-#define pinSquirtEngine 10
+// valve ports
+#define pinValveOpen 2
+#define pinValveClose 4
 
 long distance;
 
 // startbutton
-#define pinStartButten 4
+#define pinStartButten 10
 uint32_t startButtonTimePast = 0;
 
 // actions
@@ -51,17 +53,18 @@ void setup() {
   pinMode(pinSpeetPot, INPUT);
   pinMode(pinDistanceTrigger, OUTPUT);
   pinMode(pinDistanceEcho, INPUT);
-  pinMode(pinStartButten, INPUT);
-  pinMode(pinSquirtEngine, OUTPUT);
+  pinMode(pinStartButten, INPUT_PULLUP);
+  pinMode(pinValveClose, OUTPUT);
+  pinMode(pinValveOpen, OUTPUT);
   
   sensorServo.attach(pinSensorServo);
   sensorServo.write(servoAngle);
   
-  Serial.begin(9600);
+  Serial.begin(19200);
   delay(1000);
      
-  action = ACTION_SEARCH_TARGET;
-  digitalWrite(pinSquirtEngine, LOW);
+  action = ACTION_STANDBY;
+  
 }
  
 void loop() {
@@ -94,27 +97,25 @@ void loop() {
       
     case ACTION_SQUIRT:
       Serial.println("Spuit!");
-      digitalWrite(pinSquirtEngine, HIGH);
+      digitalWrite(pinValveOpen, 1);
+      digitalWrite(pinValveClose, 0);
+      delay(6000);
+      digitalWrite(pinValveOpen, 0);
+      digitalWrite(pinValveClose, 1);
+      delay(100);
+      digitalWrite(pinValveOpen, 0);
+      digitalWrite(pinValveClose, 0);
       action = ACTION_STANDBY;
       break;
   }
 }
 
 void readStartButton() {
-  if (millis() > (startButtonTimePast + 200)) {
-    startButtonTimePast = millis();
-    bool buttonPressed = 0;
-    while (digitalRead(pinStartButten)) {
-      buttonPressed = true;
-    }
-    if (buttonPressed) {
-      if (action == ACTION_STANDBY) {
-        digitalWrite(pinSquirtEngine, LOW);
-        action = ACTION_SEARCH_TARGET;
-      } else {
-        
-        action = ACTION_STANDBY;
-      }
+  if (!digitalRead(pinStartButten)) {
+    if (action == ACTION_STANDBY) {
+      action = ACTION_SEARCH_TARGET;
+    } else {
+      action = ACTION_STANDBY;
     }
   }
 }
@@ -159,8 +160,7 @@ bool isDistanceOk() {
   return (((distanceSquirt + 1) >= scanDistance) && ((distanceSquirt - 1) <= scanDistance));
 }
 
-void newscan()
-{
+void newscan() {
     scanAngleMin = 0;
     scanAngleMax = 180;
     servoAngle = 10;
