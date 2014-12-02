@@ -213,6 +213,8 @@ void newscan() {
  */
 void readWheelSpeed() {
   wheelSpeed = analogRead(pinSpeetPot);
+  Serial.println("wheelspeed: ");
+  Serial.println(wheelSpeed);
   wheelSpeed = map(wheelSpeed, 0, 1023, 50, 255);
 }
 
