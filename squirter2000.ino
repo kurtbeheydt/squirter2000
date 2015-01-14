@@ -27,11 +27,11 @@ uint32_t scanDistance;
 #define pinDistanceTrigger 9
 #define pinDistanceEcho 8
 #define distanceThreshold 30
-#define distanceSquirt 20
+#define distanceSquirt 21
 
 // valve ports
-#define pinValveOpen 2
-#define pinValveClose 4
+#define pinValveOpen 4
+#define pinValveClose 2
 
 long distance;
 
@@ -57,11 +57,15 @@ void setup() {
   pinMode(pinValveClose, OUTPUT);
   pinMode(pinValveOpen, OUTPUT);
   
+  digitalWrite(pinValveOpen, 0);
+  digitalWrite(pinValveClose, 1);
+  digitalWrite(pinValveClose, 0);
+  
   sensorServo.attach(pinSensorServo);
   sensorServo.write(servoAngle);
   
   Serial.begin(19200);
-  delay(1000);
+  delay(500);
      
   action = ACTION_STANDBY;
   
